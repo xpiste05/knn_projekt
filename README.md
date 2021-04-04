@@ -1,1 +1,1 @@
-# knn_projekt
+# License plate recognition
