@@ -1,3 +1,8 @@
+# project: KNN - license plate recognition
+# authors: Le Hoang Anh (xlehoa00)
+#          Pistelak Radek (xpiste05)
+#          Sorm Jan (xsormj00)
+# year:    2021
 import os
 from PIL import Image
 import pytesseract
