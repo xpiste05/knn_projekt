@@ -48,9 +48,9 @@ class InputParser():
         else:
             labels = self.test_value_list
 
-        for label in labels:
+        for i, label in enumerate(labels):
             size = len(label)
             if size < 8:
-                label = label[:size - 4] + "#" * (8 - size) + label[size - 4:]
+                labels[i] = label[:size - 4] + "#" * (8 - size) + label[size - 4:]
         
         return labels
