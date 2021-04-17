@@ -86,5 +86,4 @@ class Net(nn.Module):
         y8 = self.fc28(y8)
 #        y8 = self.softmax(y8)
 
-
         return y1, y2, y3, y4, y5, y6, y7, y8

@@ -3,6 +3,9 @@ import torch.optim as optim
 import random
 import torch
 import numpy as np
+import datetime
+import Levenshtein
+from multiprocessing import Pool
 from PIL import Image
 from network import Net 
 from inputParser import InputParser
@@ -48,43 +51,112 @@ def decodeLabel(encodedLabel):
 
     return text
 
+def loadImg(path):
+    img = Image.open(path)
+    img = img.resize((200,40))
+    return np.moveaxis(np.asarray(img),2,0)
+
+def loadModel(epoch):
+    device = torch.device('cpu')
+    model = Net()
+    model.load_state_dict(torch.load("model_" + str(epoch), map_location=device))
+    return model.float().cuda()
+
+def test(batch_size, testImages, testLabels, epoch):
+    net = loadModel(epoch) 
+    indices = list(range(len(testImages)))
+    batches = [indices[i * batch_size:(i + 1) * batch_size] for i in range((len(indices) + batch_size - 1) // batch_size )]
+
+    correctChars = 0
+    result = [0,0,0,0,0,0,0,0,0]
+
+    for batch in batches:
+        imageBatch = np.zeros((len(batch), 3, 40, 200))
+        labelBatch = np.zeros((len(batch), 8))
+
+        p = Pool()
+        imageBatch = p.map(loadImg, [testImages[id] for id in batch])
+        p.close()
+
+        imageBatch = torch.tensor(imageBatch).float().cuda()
+
+        out1, out2, out3, out4, out5, out6, out7, out8 = net(imageBatch)
+
+        for i, id in enumerate(batch):
+            tmp = np.zeros((8,36))
+            tmp[0] = out1[i].detach().cpu().numpy()
+            tmp[1] = out2[i].detach().cpu().numpy()
+            tmp[2] = out3[i].detach().cpu().numpy()
+            tmp[3] = out4[i].detach().cpu().numpy()
+            tmp[4] = out5[i].detach().cpu().numpy()
+            tmp[5] = out6[i].detach().cpu().numpy()
+            tmp[6] = out7[i].detach().cpu().numpy()
+            tmp[7] = out8[i].detach().cpu().numpy()
+            value = decodeLabel(tmp)
+
+            for i in range(len(value)):
+                if value[i] == testLabels[id][i]:
+                    correctChars += 1
+
+            if value == testLabels[id]:
+                result[0] += 1
+            else:
+                distance = Levenshtein.distance(value, testLabels[id])
+                if distance > 8:
+                    distance = 8
+                result[distance] += 1
+
+    print(correctChars, "z", len(testLabels) * 8)
+    print(result)
+
+
 if __name__ == "__main__":
 
-    batch_size = 64
-    input = InputParser()
-    train_images = input.getPathsToImages(train=True)
-    train_labels = input.getLabels(train=True)
-    indices = list(range(len(train_images)))
+    batch_size = 256
+    epochs = 50
 
-    net = Net().float()
+    input = InputParser()
+
+    trainImages = input.getPathsToImages("train")
+    trainLabels = input.getLabels("train")
+    testImages = input.getPathsToImages("test")
+    testLabels = input.getLabels("test")
+    validationImages = input.getPathsToImages("validation")
+    validationLabels = input.getLabels("validation")
+    indices = list(range(len(trainImages)))
+    validationIndices = list(range(len(validationImages)))
+    outputLoss = np.zeros((epochs, 2))
+
+    test(batch_size, testImages, testLabels, 4)
+    exit()
+
+    net = Net().float().cuda()
     criterion = nn.CrossEntropyLoss()
-    criterion2 = nn.CrossEntropyLoss()
-    criterion3 = nn.CrossEntropyLoss()
-    criterion4 = nn.CrossEntropyLoss()
-    criterion5 = nn.CrossEntropyLoss()
-    criterion6 = nn.CrossEntropyLoss()
-    criterion7 = nn.CrossEntropyLoss()
-    criterion8 = nn.CrossEntropyLoss()
+
     optimizer = optim.Adam(net.parameters(), lr=0.001)
 
-    epochs = 20
     for epoch in range(epochs):
-        running_loss = 0.0
-        random.shuffle(indices)
-        final = [indices[i * batch_size:(i + 1) * batch_size] for i in range((len(indices) + batch_size - 1) // batch_size )]
 
-        for batch in final:
+        running_loss = 0.0
+        validation_running_loss = 0.0
+
+        random.shuffle(indices)
+
+        batches = [indices[i * batch_size:(i + 1) * batch_size] for i in range((len(indices) + batch_size - 1) // batch_size )]
+
+        for batch in batches:
             imageBatch = np.zeros((len(batch), 3, 40, 200))
             labelBatch = np.zeros((len(batch), 8))
 
-            for i, id in enumerate(batch):
-                img = Image.open(train_images[id], mode='r')
-                img = img.resize((200, 40))
-                imageBatch[i] = np.moveaxis(np.asarray(img),2,0)
-                labelBatch[i] = encodeLabel(train_labels[id])
+            p = Pool()
+            imageBatch = p.map(loadImg, [trainImages[id] for id in batch])
+            p.close()
 
-            imageBatch = torch.tensor(imageBatch).float()
-            labelBatch = torch.tensor(labelBatch).float()
+            for i, id in enumerate(batch):
+                labelBatch[i] = encodeLabel(trainLabels[id])
+
+            imageBatch = torch.tensor(imageBatch).float().cuda()
+            labelBatch = torch.tensor(labelBatch).float().cuda()
 
             # zero the parameter gradients
             optimizer.zero_grad()
@@ -92,41 +164,88 @@ if __name__ == "__main__":
             # forward + backward + optimize
             out1, out2, out3, out4, out5, out6, out7, out8 = net(imageBatch)
             loss1 = criterion(out1, labelBatch[:,0].long())
-            loss2 = criterion2(out2, labelBatch[:,1].long())
-            loss3 = criterion3(out3, labelBatch[:,2].long())
-            loss4 = criterion4(out4, labelBatch[:,3].long())
-            loss5 = criterion5(out5, labelBatch[:,4].long())
-            loss6 = criterion6(out6, labelBatch[:,5].long())
-            loss7 = criterion7(out7, labelBatch[:,6].long())
-            loss8 = criterion8(out8, labelBatch[:,7].long())
+            loss2 = criterion(out2, labelBatch[:,1].long())
+            loss3 = criterion(out3, labelBatch[:,2].long())
+            loss4 = criterion(out4, labelBatch[:,3].long())
+            loss5 = criterion(out5, labelBatch[:,4].long())
+            loss6 = criterion(out6, labelBatch[:,5].long())
+            loss7 = criterion(out7, labelBatch[:,6].long())
+            loss8 = criterion(out8, labelBatch[:,7].long())
             loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6 + loss7 + loss8
+
             loss.backward()
             optimizer.step()
 
             # print statistics
             running_loss += loss.item()
-#            if i % 2000 == 1999:    # print every 2000 mini-batches
-#                print('[%d, %5d] loss: %.3f' %
-#                    (epoch + 1, i + 1, running_loss / 2000))
+            if i % 200 == 199:    # print every 200 mini-batches
+                print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 200))
 #                running_loss = 0.0
-        print(running_loss / len(final), epoch)
-        for ind in [0,2,14]:
-            pom = np.zeros((1,3,40,200))
-            img = Image.open(train_images[ind], mode='r')
-            img = img.resize((200, 40))
-            img = np.moveaxis(np.asarray(img),2,0)
-            pom[0] = img
-            pom = torch.tensor(pom).float()
-            o1, o2, o3, o4, o5, o6, o7, o8 = net(pom)
-            pom2 = np.zeros((8,36))
-            pom2[0] = o1[0].detach().numpy()
-            pom2[1] = o2[0].detach().numpy()
-            pom2[2] = o3[0].detach().numpy()
-            pom2[3] = o4[0].detach().numpy()
-            pom2[4] = o5[0].detach().numpy()
-            pom2[5] = o6[0].detach().numpy()
-            pom2[6] = o7[0].detach().numpy()
-            pom2[7] = o8[0].detach().numpy()
-            print(decodeLabel(pom2), train_labels[ind])
 
+        torch.save(net.state_dict(), "model_" + str(epoch))
+
+        validationBatches = [validationIndices[i * batch_size:(i + 1) * batch_size] for i in range((len(validationImages) + batch_size - 1) // batch_size )]
+
+        for batch in validationBatches:
+            imageBatch = np.zeros((len(batch), 3, 40, 200))
+            labelBatch = np.zeros((len(batch), 8))
+
+            p = Pool()
+            imageBatch = p.map(loadImg, [validationImages[id] for id in batch])
+            p.close()
+
+            for i, id in enumerate(batch):
+                labelBatch[i] = encodeLabel(validationLabels[id])
+
+            imageBatch = torch.tensor(imageBatch).float().cuda()
+            labelBatch = torch.tensor(labelBatch).float().cuda()
+
+            out1, out2, out3, out4, out5, out6, out7, out8 = net(imageBatch)
+            loss1 = criterion(out1, labelBatch[:,0].long())
+            loss2 = criterion(out2, labelBatch[:,1].long())
+            loss3 = criterion(out3, labelBatch[:,2].long())
+            loss4 = criterion(out4, labelBatch[:,3].long())
+            loss5 = criterion(out5, labelBatch[:,4].long())
+            loss6 = criterion(out6, labelBatch[:,5].long())
+            loss7 = criterion(out7, labelBatch[:,6].long())
+            loss8 = criterion(out8, labelBatch[:,7].long())
+            loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6 + loss7 + loss8
+
+            validation_running_loss += loss.item()
+
+        print("Validation loss:", validation_running_loss / len(validationBatches), epoch)
+        print("Training loss:", running_loss / len(batches), epoch)
+        outputLoss[epoch, 0] = running_loss / len(batches)
+        outputLoss[epoch, 1] = validation_running_loss / len(validationBatches)
+
+        with open('loss.npy', 'wb') as f:
+            np.save(f, outputLoss)
+
+
+
+
+
+
+
+
+
+        #for ind in [0,2,14]:
+        #    pom = np.zeros((1,3,40,200))
+        #    img = Image.open(trainImages[ind], mode='r')
+        #    img = img.resize((200, 40))
+        #    img = np.moveaxis(np.asarray(img),2,0)
+        #    pom[0] = img
+        #    pom = torch.tensor(pom).float().cuda()
+        #    o1, o2, o3, o4, o5, o6, o7, o8 = net(pom)
+        #    pom2 = np.zeros((8,36))
+        #    pom2[0] = o1[0].detach().numpy()
+        #    pom2[1] = o2[0].detach().numpy()
+        #    pom2[2] = o3[0].detach().numpy()
+        #    pom2[3] = o4[0].detach().numpy()
+        #    pom2[4] = o5[0].detach().numpy()
+        #    pom2[5] = o6[0].detach().numpy()
+        #    pom2[6] = o7[0].detach().numpy()
+        #    pom2[7] = o8[0].detach().numpy()
+        #    print(decodeLabel(pom2), trainLabels[ind])
+    
     print('Finished Training')
