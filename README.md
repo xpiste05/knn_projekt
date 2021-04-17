@@ -8,5 +8,3 @@ Pištělák Radek (xpiste05)
 
 Šorm Jan (xsormj00)
 
-# Návod na spuštění
-
