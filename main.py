@@ -10,19 +10,6 @@ from PIL import Image
 from network import Net 
 from inputParser import InputParser
 
-def encodeLabel2(label):
-    output = np.zeros((8, 36))
-
-    for i, char in enumerate(label):
-        if char.isdigit():
-            output[i, ord(char) - 48] = 1
-        elif char == "#":
-            output[i, 24] = 1
-        else:
-            output[i, ord(char) - 55] = 1
-
-    return output
-
 def encodeLabel(label):
     output = np.zeros(8)
 
@@ -127,8 +114,8 @@ if __name__ == "__main__":
     validationIndices = list(range(len(validationImages)))
     outputLoss = np.zeros((epochs, 2))
 
-    test(batch_size, testImages, testLabels, 4)
-    exit()
+    #test(batch_size, testImages, testLabels, 4)
+    #exit()
 
     net = Net().float().cuda()
     criterion = nn.CrossEntropyLoss()
@@ -158,10 +145,8 @@ if __name__ == "__main__":
             imageBatch = torch.tensor(imageBatch).float().cuda()
             labelBatch = torch.tensor(labelBatch).float().cuda()
 
-            # zero the parameter gradients
             optimizer.zero_grad()
 
-            # forward + backward + optimize
             out1, out2, out3, out4, out5, out6, out7, out8 = net(imageBatch)
             loss1 = criterion(out1, labelBatch[:,0].long())
             loss2 = criterion(out2, labelBatch[:,1].long())
@@ -176,11 +161,7 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
 
-            # print statistics
             running_loss += loss.item()
-            if i % 200 == 199:    # print every 200 mini-batches
-                print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 200))
-#                running_loss = 0.0
 
         torch.save(net.state_dict(), "model_" + str(epoch))
 
@@ -220,32 +201,5 @@ if __name__ == "__main__":
 
         with open('loss.npy', 'wb') as f:
             np.save(f, outputLoss)
-
-
-
-
-
-
-
-
-
-        #for ind in [0,2,14]:
-        #    pom = np.zeros((1,3,40,200))
-        #    img = Image.open(trainImages[ind], mode='r')
-        #    img = img.resize((200, 40))
-        #    img = np.moveaxis(np.asarray(img),2,0)
-        #    pom[0] = img
-        #    pom = torch.tensor(pom).float().cuda()
-        #    o1, o2, o3, o4, o5, o6, o7, o8 = net(pom)
-        #    pom2 = np.zeros((8,36))
-        #    pom2[0] = o1[0].detach().numpy()
-        #    pom2[1] = o2[0].detach().numpy()
-        #    pom2[2] = o3[0].detach().numpy()
-        #    pom2[3] = o4[0].detach().numpy()
-        #    pom2[4] = o5[0].detach().numpy()
-        #    pom2[5] = o6[0].detach().numpy()
-        #    pom2[6] = o7[0].detach().numpy()
-        #    pom2[7] = o8[0].detach().numpy()
-        #    print(decodeLabel(pom2), trainLabels[ind])
     
     print('Finished Training')
