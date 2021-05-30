@@ -285,7 +285,7 @@ if __name__ == "__main__":
             imageBatch = torch.tensor(imageBatch).float().to(device)
             labelBatch = torch.tensor(labelBatch).long().to(device)
 
-            _, _, out = net(imageBatch, labelBatch)
+            _, _, out = net(imageBatch, labelBatch, isTrain=False)
 
             if useBaseline:
                 (out1, out2, out3, out4, out5, out6, out7, out8) = out
@@ -299,7 +299,7 @@ if __name__ == "__main__":
                 loss8 = criterion(out8, labelBatch[:,7].long())
                 loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6 + loss7 + loss8
             else:
-                labelBatch = labelBatch[...,1:]
+                labelBatch = labelBatch[...,1:].long()
                 loss = criterion(out.view(-1, out.shape[-1]), labelBatch.contiguous().view(-1))
 
             validationRunningLoss += loss.item()
