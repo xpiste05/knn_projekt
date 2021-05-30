@@ -1,8 +1,8 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-class Net(nn.Module):
+class BaselineRecognitionNetwork(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -59,31 +59,31 @@ class Net(nn.Module):
         x = self.bn3(F.relu(self.conv5(x)))
         x = self.bn3(F.relu(self.conv6(x)))
         x = self.pool(x)
+
         x = x.view(-1, 8000)
-#        x = nn.Flatten(x, start_dim=1)
+
         y1 = self.fc11(x)
         y1 = self.fc21(y1)
-#        y1 = self.softmax(y1)
+
         y2 = self.fc12(x)
         y2 = self.fc22(y2)
-#        y2 = self.softmax(y2)
+
         y3 = self.fc13(x)
         y3 = self.fc23(y3)
-#        y3 = self.softmax(y3)
+
         y4 = self.fc14(x)
         y4 = self.fc24(y4)
-#        y4 = self.softmax(y4)
+
         y5 = self.fc15(x)
         y5 = self.fc25(y5)
-#        y5 = self.softmax(y5)
+
         y6 = self.fc16(x)
         y6 = self.fc26(y6)
-#        y6 = self.softmax(y6)
+
         y7 = self.fc17(x)
         y7 = self.fc27(y7)
-#        y7 = self.softmax(y7)
+
         y8 = self.fc18(x)
         y8 = self.fc28(y8)
-#        y8 = self.softmax(y8)
 
         return y1, y2, y3, y4, y5, y6, y7, y8

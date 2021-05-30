@@ -1,68 +1,115 @@
 import os
+import numpy as np
+
+from PIL import Image
 
 class InputParser():
     def __init__(self):
 
-        dataset_dir = "dataset"
-        train_values_file = os.path.join(dataset_dir, "dataset.txt")
+        if not os.path.isfile("TrainDataset.npz") or not os.path.isfile("TestDataset.npz"):
 
-        with open(train_values_file, 'r', encoding="utf-8") as f:
-            lines = [line.strip('\r\n') for line in f.readlines()]
+            datasetDir = "dataset"
+            valuesFile = os.path.join(datasetDir, "dataset.txt")
 
-        self.train_image_path_list = []
-        self.train_value_list = []
-        self.test_image_path_list = []
-        self.test_value_list = []
+            with open(valuesFile, 'r', encoding="utf-8") as f:
+                lines = [line.strip('\r\n') for line in f.readlines()]
 
-        for i, line in enumerate(lines):
-            split = line.split(';')
-            img_path = split[0]
-            value = split[1]
-            train = split[2]
+            trainImagePathList = []
+            trainValueList = []
+            testImagePathList = []
+            testValueList = []
 
-            if train == "1":
-                self.train_image_path_list.append(os.path.join(dataset_dir, img_path))
-                self.train_value_list.append(value)
-            else:
-                self.test_image_path_list.append(os.path.join(dataset_dir, img_path))
-                self.test_value_list.append(value)
+            for i, line in enumerate(lines):
+                split = line.split(';')
+                img_path = split[0]
+                value = split[1]
+                train = split[2]
 
-        size = len(self.train_image_path_list) - (len(self.train_image_path_list) // 10)
-        self.validation_image_path_list = self.train_image_path_list[size:]
-        self.train_image_path_list = self.train_image_path_list[:size]
-        self.validation_value_list = self.train_value_list[size:]
-        self.train_value_list = self.train_value_list[:size]
+                if train == "1":
+                    trainImagePathList.append(os.path.join(datasetDir, img_path))
+                    trainValueList.append(value)
+                else:
+                    testImagePathList.append(os.path.join(datasetDir, img_path))
+                    testValueList.append(value)
 
-        print(len(self.train_image_path_list))
-        print(len(self.test_image_path_list))
+            self.createDatasetFile(trainImagePathList, trainValueList, "TrainDataset.npz")
+            self.createDatasetFile(testImagePathList, testValueList, "TestDataset.npz")
+        
+        
+        self.loadDataset(train = True)
+        self.loadDataset(train = False)
+
+        # TODO: omezeni
+        # self.trainImages = self.trainImages[::20]
+        # self.trainLabels = self.trainLabels[::20]           
 
 
-    def getPathsToImages(self, setType):
+    def loadImg(self, path):
+        with Image.open(path) as img:
+            return np.asarray(img)
+
+    def createDatasetFile(self, imagePaths, labels, datasetName):
+
+        dataset = np.empty([len(imagePaths),2], dtype=object)
+
+        for i in range(len(imagePaths)):
+            dataset[i][0] = self.loadImg(imagePaths[i])
+            dataset[i][1] = labels[i]
+            if i%5000 == 0:
+                print(i, "/", len(imagePaths))
+
+        np.savez(datasetName, data=dataset)
+
+    def loadDataset(self, train):
+        
+        datasetName = "TrainDataset.npz" if train else "TestDataset.npz"
+
+        np_load_old = np.load
+        np.load = lambda *a,**k: np_load_old(*a, allow_pickle=True)
+
+        dataset = np.load(datasetName)
+        data = dataset['data']
+
+        if train:
+            self.trainImages = data[..., 0]
+            self.trainLabels = data[..., 1]
+        else:
+            self.testImages = data[..., 0]
+            self.testLabels = data[..., 1]
+
+    def getImages(self, setType):
+
+        N = 10
+        images = []
 
         if setType == "train":
-            return self.train_image_path_list
+            images = self.trainImages
+            images = np.delete(images, np.arange(0, images.size, N))
         elif setType == "validation":
-            return self.validation_image_path_list
+            images = self.trainImages[::N]
         else:
-            return self.test_image_path_list
+            images = self.testImages
 
+        print(setType, len(images))
+        return images
 
-    def getLabels(self, setType):
+    def getLabels(self, setType, useBaseline):
 
+        N = 10
         labels = []
 
         if setType == "train":
-            labels = self.train_value_list
+            labels = self.trainLabels
+            labels = np.delete(labels, np.arange(0, labels.size, N))
         elif setType == "validation":
-            labels = self.validation_value_list
+            labels = self.trainLabels[::N]
         else:
-            labels = self.test_value_list
+            labels = self.testLabels
 
-        for i, label in enumerate(labels):
-            size = len(label)
-            if size > 8:
-                print(label)
-            if size < 8:
-                labels[i] = label[:size - 4] + "#" * (8 - size) + label[size - 4:]
+        if useBaseline:
+            for i, label in enumerate(labels):
+                size = len(label)
+                if size < 8:
+                    labels[i] = label[:size - 4] + "#" * (8 - size) + label[size - 4:]
 
         return labels
